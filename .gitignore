@@ -1,0 +1,5 @@
+# 运行结果临时文件（仅本地，推送 PushPlus 后清空）
+checkin_results.txt
+
+__pycache__/
+*.pyc

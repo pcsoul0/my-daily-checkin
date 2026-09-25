@@ -1,0 +1,64 @@
+name: 每日签到总调度
+
+# 单一调度：每天北京时间 12:15 顺序跑完 4 个站点签到，
+# 各脚本把结果追加写入本地文件 checkin_results.txt（已被 .gitignore 忽略，不提交仓库），
+# 最后由 daily_push.py 汇总并通过 PushPlus 推送。
+on:
+  schedule:
+    - cron: '15 4 * * *'   # UTC 04:15 = 北京时间 12:15（GitHub 定时触发可能有 0~30 分钟延迟）
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sign-all:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: pip install requests
+
+      - name: 恩山论坛签到
+        env:
+          ESHAN_COOKIE: ${{ secrets.ESHAN_COOKIE }}
+          USER_UID: ${{ secrets.USER_UID }}
+        run: python enshan.py
+        continue-on-error: true
+
+      - name: 飞牛社区签到
+        env:
+          FNOS_COOKIE: ${{ secrets.FNOS_COOKIE }}
+        run: python fnclub.py
+        continue-on-error: true
+
+      - name: 智能电视网签到
+        env:
+          ZNDS_USERNAME: ${{ secrets.ZNDS_USERNAME }}
+          ZNDS_PASSWORD: ${{ secrets.ZNDS_PASSWORD }}
+        run: python znds.py
+        continue-on-error: true
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: HIFITI 签到
+        env:
+          ACCOUNTS: ${{ secrets.HIFITI_ACCOUNTS }}
+        run: node hifiti.js
+        continue-on-error: true
+
+      - name: PushPlus 汇总通知
+        env:
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+        run: python daily_push.py
+        continue-on-error: true
