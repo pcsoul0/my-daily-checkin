@@ -1,7 +1,7 @@
 name: PCBETA签到任务
 on:
   schedule:
-  #   - cron: '15 4 * * *'  # 如需纳入每日调度可放开（北京时间 12:15）
+  #   - cron: '15 16 * * *'  # 如需纳入每日调度可放开（北京时间 00:15）
   workflow_dispatch:      # 支持手动触发
 
 jobs:

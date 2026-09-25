@@ -5,7 +5,7 @@ name: 每日签到总调度
 # 最后由 daily_push.py 汇总并通过 PushPlus 推送。
 on:
   schedule:
-    - cron: '15 4 * * *'   # UTC 04:15 = 北京时间 12:15（GitHub 定时触发可能有 0~30 分钟延迟）
+    - cron: '15 16 * * *'   # UTC 16:15 = 北京时间 00:15（GitHub 定时触发可能有 0~30 分钟延迟）
   workflow_dispatch:
 
 permissions:

@@ -18,7 +18,7 @@
 
 ## 运行流程
 
-- **`sign_all.yml`（每日签到总调度）**：每天北京时间 **12:15**（cron `15 4 * * *` UTC，GitHub 定时可能有 0~30 分钟延迟）顺序执行恩山 → 飞牛 → 智能电视网 → HIFITI 四个签到，最后统一推送 PushPlus。也支持在 Actions 页面手动触发。
+- **`sign_all.yml`（每日签到总调度）**：每天北京时间 **00:15**（cron `15 16 * * *` UTC，GitHub 定时可能有 0~30 分钟延迟）顺序执行恩山 → 飞牛 → 智能电视网 → HIFITI 四个签到，最后统一推送 PushPlus。也支持在 Actions 页面手动触发。
 - **`pcbeta.yml`（PCBETA 签到）**：默认仅手动触发。
 - 签到结果只写入本地临时文件 `checkin_results.txt`（已被 `.gitignore` 忽略），推送 PushPlus 后清空，**不写入 README、不提交到仓库**。
 - 所有凭据通过 GitHub Secrets 注入环境变量，代码中不含任何敏感信息；脚本输出已脱敏（不打印用户名/Cookie）。
@@ -36,7 +36,7 @@
 ```
 .
 ├── .github/workflows/
-│   ├── sign_all.yml        # 每日总调度（北京时间 12:15）
+│   ├── sign_all.yml        # 每日总调度（北京时间 00:15）
 │   └── pcbeta.yml          # PCBETA 备用签到（手动触发）
 ├── enshan.py               # 恩山论坛签到
 ├── fnclub.py               # 飞牛论坛签到（含 WAF 解算）
