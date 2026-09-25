@@ -12,14 +12,12 @@
 | `fnclub.py` | 飞牛论坛 (club.fnnas.com) | 纯 HTTP 签到，内置阿里云 WAF `acw_sc__v2` Cookie 挑战自动解算（Node 执行站点算法） | `FNOS_COOKIE` |
 | `znds.py` | 智能电视网 (znds.com) | 账号密码登录后签到，抓取金币/威望/Z币/积分 | `ZNDS_USERNAME`、`ZNDS_PASSWORD` |
 | `hifiti.js` | HIFITI 论坛 (hifiti.com) | Node 纯 HTTP 签到，支持 JSON 数组多账号并发，带网络层重试 | `HIFITI_ACCOUNTS` |
-| `pcbeta.py` | 远景论坛 (bbs.pcbeta.com) | Cookie 登录签到。⚠️ 机房 IP 易触发滑块验证，Actions 环境大概率失败，仅保留备用 | `PCBETA_COOKIE` |
 | `daily_push.py` | PushPlus | 汇总本轮所有签到结果，HTML 模板推送到微信，推送后清空结果文件 | `PUSHPLUS_TOKEN` |
 | `notify.py` | PushPlus | 独立推送工具函数，可被其他脚本 import 复用或单独测试 | `PUSHPLUS_TOKEN` |
 
 ## 运行流程
 
 - **`sign_all.yml`（每日签到总调度）**：每天北京时间 **00:15**（cron `15 16 * * *` UTC，GitHub 定时可能有 0~30 分钟延迟）顺序执行恩山 → 飞牛 → 智能电视网 → HIFITI 四个签到，最后统一推送 PushPlus。也支持在 Actions 页面手动触发。
-- **`pcbeta.yml`（PCBETA 签到）**：默认仅手动触发。
 - 签到结果只写入本地临时文件 `checkin_results.txt`（已被 `.gitignore` 忽略），推送 PushPlus 后清空，**不写入 README、不提交到仓库**。
 - 所有凭据通过 GitHub Secrets 注入环境变量，代码中不含任何敏感信息；脚本输出已脱敏（不打印用户名/Cookie）。
 
@@ -36,13 +34,11 @@
 ```
 .
 ├── .github/workflows/
-│   ├── sign_all.yml        # 每日总调度（北京时间 00:15）
-│   └── pcbeta.yml          # PCBETA 备用签到（手动触发）
+│   └── sign_all.yml        # 每日总调度（北京时间 00:15）
 ├── enshan.py               # 恩山论坛签到
 ├── fnclub.py               # 飞牛论坛签到（含 WAF 解算）
 ├── znds.py                 # 智能电视网签到
 ├── hifiti.js               # HIFITI 论坛签到（Node，多账号）
-├── pcbeta.py               # 远景论坛签到（备用）
 ├── daily_push.py           # PushPlus 汇总推送
 └── notify.py               # PushPlus 推送工具函数
 ```

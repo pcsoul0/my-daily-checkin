@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """汇总当日签到结果并推送到 PushPlus。
 
-签到脚本（enshan.py / fnclub.py / znds.py / pcbeta.py / hifiti.js）将结果
+签到脚本（enshan.py / fnclub.py / znds.py / hifiti.js）将结果
 追加写入本地文件 checkin_results.txt（已被 .gitignore 忽略，不入库），
 本脚本读取该文件内容推送 PushPlus，推送成功后清空，供下一轮使用。
 """

@@ -5,7 +5,7 @@ const responseSuccessCode = "0";
 const siteName = "HIFITI论坛签到";
 
 // 北京时间（UTC+8，无夏令时）当前时间，格式固定为 YYYY-MM-DD HH:MM:SS
-// 与 enshan.py / fnclub.py / znds.py / pcbeta.py 的 strftime("%Y-%m-%d %H:%M:%S") 保持一致
+// 与 enshan.py / fnclub.py / znds.py 的 strftime("%Y-%m-%d %H:%M:%S") 保持一致
 function formatNow() {
   const d = new Date(Date.now() + 8 * 3600 * 1000);
   const p = (n) => String(n).padStart(2, "0");
