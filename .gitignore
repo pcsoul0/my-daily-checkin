@@ -1,5 +1,15 @@
 # 运行结果临时文件（仅本地，推送 PushPlus 后清空）
 checkin_results.txt
 
+# 凭据文件（本地调试用，严禁提交）
+token.info
+*.token
+.env
+ima_cookie.info
+ima_refresh.info
+
+# ima 登录态抓取产物
+.ima_capture/
+
 __pycache__/
 *.pyc

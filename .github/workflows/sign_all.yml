@@ -1,8 +1,10 @@
 name: 每日签到总调度
 
-# 单一调度：每天北京时间 12:15 顺序跑完 4 个站点签到，
+# 单一调度：每天北京时间 00:09 顺序跑完全部签到任务（4 个论坛 + WorkBuddy + ima），
 # 各脚本把结果追加写入本地文件 checkin_results.txt（已被 .gitignore 忽略，不提交仓库），
 # 最后由 daily_push.py 汇总并通过 PushPlus 推送。
+# 所有签到步骤均为 continue-on-error，单个站点失败不中断后续任务；
+# 成败信息统一体现在 PushPlus 推送内容中（不依赖 Actions 失败邮件）。
 on:
   schedule:
     - cron: '9 16 * * *'   # UTC 16:09 = 北京时间 00:09（GitHub 定时触发可能有 0~30 分钟延迟）
@@ -57,7 +59,25 @@ jobs:
         run: node hifiti.js
         continue-on-error: true
 
+      - name: WorkBuddy 签到
+        env:
+          WB_TOKEN: ${{ secrets.WB_TOKEN }}       # Bearer accessToken（必填）
+          WB_UID: ${{ secrets.WB_UID }}           # 账号 uid（必填）
+          WB_DOMAIN: www.workbuddy.cn             # 非敏感，明文即可
+          WB_API_BASE: https://copilot.tencent.com
+        run: python workbuddy_checkin.py
+        continue-on-error: true
+
+      - name: ima 每日登录领算力
+        env:
+          # refresh 模式凭据 JSON（user_id/refresh_token/token_type/static_fields），
+          # 长效 30 天；脚本每次运行先调 auth_login/refresh 换新 access token，绕开 2h TTL。
+          IMA_REFRESH: ${{ secrets.IMA_REFRESH }}
+        run: python ima_checkin.py
+        continue-on-error: true
+
       - name: PushPlus 汇总通知
+        if: always()
         env:
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
         run: python daily_push.py
