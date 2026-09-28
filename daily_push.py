@@ -67,6 +67,15 @@ def push(content):
 def main():
     print("=== 每日签到日志推送任务 ===")
     content = read_results()
+    blocks = [b.strip() for b in content.split("\n\n") if b.strip()]
+    if blocks:
+        # 打印汇总条目概览，便于从 Actions 日志直接核对本轮覆盖了哪些站点
+        print(f"ℹ️ 本次汇总 {len(blocks)} 条结果：")
+        for b in blocks:
+            first = b.splitlines()[0]
+            print("   - " + (first[:70] + "…" if len(first) > 70 else first))
+    else:
+        print("ℹ️ 未读取到签到结果")
     if push(content):
         clear_results()
 
