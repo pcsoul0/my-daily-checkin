@@ -11,11 +11,23 @@
 | `enshan.py` | 恩山论坛 (right.com.cn) | 纯 HTTP 签到（参考 [Sitoi/dailycheckin](https://github.com/Sitoi/dailycheckin) 思路），自动提取 formhash，抓取今日/累计积分与连签天数 | `ESHAN_COOKIE`、`USER_UID` |
 | `fnclub.py` | 飞牛论坛 (club.fnnas.com) | 纯 HTTP 签到，内置阿里云 WAF `acw_sc__v2` Cookie 挑战自动解算（Node 执行站点算法） | `FNOS_COOKIE` |
 | `znds.py` | 智能电视网 (znds.com) | 账号密码登录后签到，抓取金币/威望/Z币/积分 | `ZNDS_USERNAME`、`ZNDS_PASSWORD` |
-| `hifiti.js` | HIFITI 论坛 (hifiti.com) | Node 纯 HTTP 签到，支持 JSON 数组多账号并发，带网络层重试 | `HIFITI_ACCOUNTS` |
-| `workbuddy_checkin.py` | WorkBuddy (copilot.tencent.com) | Bearer 认证调 `daily-checkin`，幂等（`code=10001` 视为已签），成功后抓取积分概览 | `WB_TOKEN`、`WB_UID` |
+| `hifiti.js` | HIFITI 论坛 (hifiti.com) | Node 纯 HTTP 签到，支持 JSON 数组多账号并发，带网络层重试（移植自 [ewigl/hifini-auto-checkin](https://github.com/ewigl/hifini-auto-checkin)） | `HIFITI_ACCOUNTS` |
+| `workbuddy_checkin.py` | WorkBuddy (copilot.tencent.com) | Bearer 认证调 `daily-checkin`，幂等（`code=10001` 视为已签），成功后抓取积分概览（签到逻辑参考 [wangmingdong/workbuddy-signin](https://github.com/wangmingdong/workbuddy-signin)） | `WB_TOKEN`、`WB_UID` |
 | `ima_checkin.py` | 腾讯 ima (ima.qq.com) | refresh 模式换新 access token 后调 `daily_login_activity`，先查后签，含满签奖励延迟解锁重试 | `IMA_REFRESH` |
 | `daily_push.py` | PushPlus | 汇总本轮所有签到结果，HTML 模板推送到微信，推送后清空结果文件 | `PUSHPLUS_TOKEN` |
 | `notify.py` | PushPlus | 独立推送工具函数，可被其他脚本 import 复用或单独测试 | `PUSHPLUS_TOKEN` |
+
+## 上游项目与二次开发说明
+
+本仓库部分脚本移植或参考自社区开源项目，在此致谢，并逐条说明本项目的适配改动，便于日后跟随上游更新时比对。
+
+| 本仓库脚本 | 上游项目 | 关系 | 本项目的主要改动 |
+|---|---|---|---|
+| `hifiti.js` | [ewigl/hifini-auto-checkin](https://github.com/ewigl/hifini-auto-checkin) 的 `main.js` | 移植 | ① 新增 `fetchWithRetry`：网络层瞬时错误（`fetch failed` / ECONN / ETIMEDOUT / ENOTFOUND / EAI_AGAIN）与 HTTP 5xx 按指数退避重试 3 次，单次请求 20s 超时；② 「今天已经签过啦」由上游的精确相等改为 `includes` 包含匹配，兼容站点提示语前缀变动；③ 结果写入 `checkin_results.txt` 交 `daily_push.py` 统一推送，替代上游写入 `GITHUB_OUTPUT`；④ 日志脱敏，不再输出账号名 |
+| `workbuddy_checkin.py` | [wangmingdong/workbuddy-signin](https://github.com/wangmingdong/workbuddy-signin) 的 `workbuddy_checkin.py` | 参考签到逻辑 | ① 凭据来源改为环境变量优先（GitHub Secrets 注入），本地 token 文件仅作调试兜底；② **删除 `checkin-status` 预检**，直接调幂等的 `daily-checkin`（`code=10001` 即今日已签），规避上游 `today_checked_in` 字段假阳性导致的漏签；③ 瞬时网络错误自动重试 3 次；④ 结果写入 `GITHUB_STEP_SUMMARY` 与 `checkin_results.txt`；⑤ 全程不打印 token 本体 |
+| `enshan.py` | [Sitoi/dailycheckin](https://github.com/Sitoi/dailycheckin) | 思路参考 | 纯 HTTP 签到实现，自行提取 formhash 并解析积分 |
+
+> ⚠️ 上游 `ewigl/hifini-auto-checkin` 仓库未声明开源许可证（核实日期 2026-09-29）。沿用其代码前，建议自行确认授权范围。
 
 ## 运行流程
 
