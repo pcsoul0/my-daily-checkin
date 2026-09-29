@@ -15,7 +15,6 @@
 | `workbuddy_checkin.py` | WorkBuddy (copilot.tencent.com) | Bearer 认证调 `daily-checkin`，幂等（`code=10001` 视为已签），成功后抓取积分概览（签到逻辑参考 [wangmingdong/workbuddy-signin](https://github.com/wangmingdong/workbuddy-signin)） | `WB_TOKEN`、`WB_UID` |
 | `ima_checkin.py` | 腾讯 ima (ima.qq.com) | refresh 模式换新 access token 后调 `daily_login_activity`，先查后签，含满签奖励延迟解锁重试 | `IMA_REFRESH` |
 | `daily_push.py` | PushPlus | 汇总本轮所有签到结果，HTML 模板推送到微信，推送后清空结果文件 | `PUSHPLUS_TOKEN` |
-| `notify.py` | PushPlus | 独立推送工具函数，可被其他脚本 import 复用或单独测试 | `PUSHPLUS_TOKEN` |
 
 ## 上游项目与二次开发说明
 
@@ -146,7 +145,7 @@ gh secret set IMA_REFRESH --repo <owner>/<repo> < ima_refresh.info
 ```
 .
 ├── .github/workflows/
-│   └── sign_all.yml        # 每日总调度（北京时间 00:09，六站点串行 + PushPlus 汇总）
+│   └── sign_all.yml        # 每日总调度（北京时间 23:51，六站点串行 + PushPlus 汇总）
 ├── enshan.py               # 恩山论坛签到
 ├── fnclub.py               # 飞牛论坛签到（含 WAF 解算）
 ├── znds.py                 # 智能电视网签到
@@ -155,7 +154,6 @@ gh secret set IMA_REFRESH --repo <owner>/<repo> < ima_refresh.info
 ├── ima_checkin.py          # 腾讯 ima 每日登录领算力
 ├── renew_token.py          # WorkBuddy token 一键续期（本机运行）
 ├── daily_push.py           # PushPlus 汇总推送
-├── notify.py               # PushPlus 推送工具函数
 ├── logsafe.py              # 日志脱敏工具（所有脚本共用，见下方「日志安全」）
 └── tools/
     └── capture_ima.js      # ima 登录态抓取（本机一次性运行，需 playwright-core）
@@ -163,7 +161,7 @@ gh secret set IMA_REFRESH --repo <owner>/<repo> < ima_refresh.info
 
 ## 维护备忘
 
-- **定时**：`sign_all.yml` cron `9 16 * * *`（UTC）= 北京 00:09，选冷门分钟以降低触发延迟
+- **定时**：`sign_all.yml` cron `51 15 * * *`（UTC）= 北京 23:51，选冷门分钟以降低触发延迟
   （GitHub 定时触发仍可能有 0~30 分钟延迟）。
 - **手动触发**：Actions → 每日签到总调度 → Run workflow。
 - **本地调试**：`WB_TOKEN=xxx WB_UID=xxx python workbuddy_checkin.py`；
@@ -191,7 +189,7 @@ gh secret set IMA_REFRESH --repo <owner>/<repo> < ima_refresh.info
 2. **已登录页面的正文不打印**：页面 HTML 里的账号昵称 / uid 不在正则覆盖范围，
    只能整段省略 —— 脚本里改为只输出「页面长度 N 字符（正文含账号信息，已省略）」。
 
-新加打印语句时，请遵守同样的约定；新增脚本请 `from logsafe import ...` 复用，不要各自实现一份。
+新加打印语句时请遵守同样的约定；新增脚本请 `from logsafe import ...` 复用，不要各自实现一份。
 
 ## License
 

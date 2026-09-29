@@ -100,7 +100,7 @@ def get_formhash_and_login(session, username, password):
     
     if "您还没有登录" in verify_decoded_text or "请登录后再使用" in verify_decoded_text or "login" in verify_response.url:
         print(f"[ERROR] 登录验证失败。访问个人中心页面被重定向或提示未登录。URL: {verify_response.url}")
-                # 已登录态页面正文含账号标识，只报长度不打印正文（公开仓库日志安全）
+        # 已登录态页面正文含账号标识，只报长度不打印正文（公开仓库日志安全）
         print(f"[ERROR] 页面长度: {len(verify_decoded_text)} 字符（正文含账号信息，已省略）")
         raise Exception("登录失败：请检查用户名和密码是否正确。")
         

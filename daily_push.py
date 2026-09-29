@@ -46,7 +46,7 @@ def push(content):
         print("ℹ️ 无签到结果，跳过推送")
         return True
 
-    url = "http://www.pushplus.plus/send"
+    url = "https://www.pushplus.plus/send"
     data = {
         "token": PUSHPLUS_TOKEN,
         "title": f"签到日志汇总 {beijing_time()}",
