@@ -6,7 +6,7 @@ import shutil
 import tempfile
 from datetime import datetime, timedelta, timezone
 
-from logsafe import redact, redact_obj
+from logsafe import redact, redact_obj, mask_secret, mask_url
 
 # ====================== 配置区 ======================
 FNOS_COOKIE = os.environ.get("FNOS_COOKIE", "")
@@ -23,15 +23,24 @@ HEADERS = {
 
 
 def write_result(content):
+    """统一推送行格式：`时间 - <✅/❌> 飞牛论坛签到 详情`。
+
+    调用点传入的内容以 ✅/❌ 开头，此处把状态符号提到站点名之前（原先落在站点名
+    之后）；同时 strip 掉内容自带的换行 —— 否则会与块之间的空行叠加，在 PushPlus
+    里渲染出多余空行。
+    """
     try:
         beijing_tz = timezone(timedelta(hours=8))
         now = datetime.now(beijing_tz).strftime("%Y-%m-%d %H:%M:%S")
-        log_line = f"{now} - 飞牛论坛签到 {content}\n\n"
+        text = (content or "").strip()
+        m = re.match(r"^([✅❌ℹ️⚠️])\s*(.*)$", text, re.S)
+        status, detail = (m.group(1), m.group(2)) if m else ("ℹ️", text)
+        log_line = f"{now} - {status} 飞牛论坛签到 {detail}\n\n"
         with open("checkin_results.txt", "a", encoding="utf-8") as f:
             f.write(log_line)
         print("[INFO] 签到结果已追加写入 checkin_results.txt")
     except Exception as e:
-        print(f"[ERROR] 写入失败: {e}")
+        print(f"[ERROR] 写入失败: {redact(str(e))}")
 
 
 def _load_cookies(session, cookie_str):
@@ -50,11 +59,41 @@ def _load_cookies(session, cookie_str):
 
 
 def _find_snippet(html, keyword, span=200):
-    """返回 keyword 在 html 中前后各 span 字符的片段，用于定位拦截页长相。"""
+    """返回 keyword 在 html 中前后各 span 字符的片段。
+
+    仅供 _snippet_features 内部归纳结构用，原文不外显到日志与推送。
+    """
     i = html.find(keyword)
     if i == -1:
         return ""
     return html[max(0, i - span): i + len(keyword) + span]
+
+
+# 片段结构特征识别表：(输出标签, 判定函数)
+_SNIPPET_MARKS = (
+    ("含<script>", lambda s: "<script" in s.lower()),
+    ("document.cookie赋值", lambda s: "document.cookie" in s),
+    ("unescape解码", lambda s: "unescape" in s),
+    ("setTimeout延时", lambda s: "setTimeout" in s),
+    ("eval执行", lambda s: "eval(" in s),
+    ("var赋值", lambda s: re.search(r"\bvar\s+\w+\s*=", s) is not None),
+    ("含<form>", lambda s: "<form" in s.lower()),
+    ("含iframe", lambda s: "<iframe" in s.lower()),
+)
+
+
+def _snippet_features(html, keyword, span=200):
+    """把命中片段归纳成「结构特征串」，不回显任何原文。
+
+    页面原文里可能夹带昵称、uid、会话标识，而 logsafe.redact 是字段级规则，
+    对任意 HTML 无法保证覆盖（实测会漏），因此这里只输出结构标签，用于判断
+    挑战页形态（是 JS 挑战、滑块还是自定义验证页）。
+    """
+    seg = _find_snippet(html, keyword, span)
+    if not seg:
+        return "(未命中)"
+    marks = [name for name, test in _SNIPPET_MARKS if test(seg)]
+    return "片段长度=%d 结构: %s" % (len(seg), "、".join(marks) if marks else "(无)")
 
 
 def diagnose(html):
@@ -64,16 +103,16 @@ def diagnose(html):
     waf_snippet = ""
     if "acw_sc__v2" in html:
         waf_type = "acw_sc__v2(Aliyun WAF Cookie挑战)"
-        waf_snippet = _find_snippet(html, "acw_sc__v2")
+        waf_snippet = _snippet_features(html, "acw_sc__v2")
     elif "unescape" in html and "document.cookie" in html:
         waf_type = "unescape+document.cookie(JS挑战)"
-        waf_snippet = _find_snippet(html, "unescape")
+        waf_snippet = _snippet_features(html, "unescape")
     elif "安全验证" in html:
         waf_type = "安全验证(自定义验证页)"
-        waf_snippet = _find_snippet(html, "安全验证")
+        waf_snippet = _snippet_features(html, "安全验证")
     elif "滑动验证" in html:
         waf_type = "滑动验证(滑块验证码)"
-        waf_snippet = _find_snippet(html, "滑动验证")
+        waf_snippet = _snippet_features(html, "滑动验证")
 
     feats = {
         "http_len": len(html),
@@ -82,46 +121,77 @@ def diagnose(html):
         "already_signed": ("今日已打" in html) or ("今天已经" in html) or ("已签到" in html),
         "waf_challenge": waf_type != "未知",
         "waf_type": waf_type,
-        "waf_snippet": waf_snippet,
+        # 片段已由 _snippet_features 归纳为结构特征串（不含页面原文），这里只限长
+        "waf_snippet": waf_snippet[:300],
         "need_login": ("logging" in html and "mod=logging" in html and "action=logout" not in html),
     }
     return feats
 
 
+def _page_summary(html):
+    """页面结构摘要：只给「判断页面类型」所需的元信息，不输出正文原文。
+
+    失败页可能是 WAF 挑战页、登录页或用户中心，正文里可能夹带昵称、uid、
+    会话标识；而判断「被什么拦」其实只需要标题、长度和关键词命中情况。
+    """
+    html = html or ""
+    m = re.search(r"<title[^>]*>(.*?)</title>", html, re.S | re.I)
+    title = re.sub(r"\s+", " ", m.group(1)).strip() if m else ""
+    clean = _clean_text(html)
+    kws = ("安全验证", "滑动验证", "acw_sc__v2", "unescape", "action=logout",
+           "今日已打", "已签到", "logging")
+    hits = [kw for kw in kws if (kw in clean) or (kw in html)]
+    return {
+        "len": len(html),
+        "title": redact(title)[:80] or "(无)",
+        "hits": "、".join(hits) if hits else "(无)",
+    }
+
+
 def log_diagnostics(resp):
-    """把拦截页的关键信息写入结果文件，便于定位到底被什么拦。"""
+    """把拦截页的关键信息写入结果文件，便于定位到底被什么拦。
+
+    本块会推送到 PushPlus（第三方）并出现在公开仓库的 Actions 日志里，因此
+    所有来自响应的内容（URL 参数、Cookie 值、响应头、页面正文）一律脱敏：
+    只保留「判定依据与分类标签」，不回显原始值。
+    """
     try:
         html = resp.text
         hdr_lines = []
         for k in ("Server", "Content-Type", "Date"):
             if k in resp.headers:
-                hdr_lines.append(f"  {k}: {resp.headers[k]}")
-        # Set-Cookie 只留名字 + 值前 24 字符预览，掩去完整敏感值
+                hdr_lines.append(f"  {k}: {redact(resp.headers[k])[:120]}")
+        # Set-Cookie 只留名字 + 值指纹（不输出任何值片段，公开仓库 / 第三方推送）
         for c in resp.cookies:
-            val_preview = (c.value[:24] + "…") if len(c.value) > 24 else c.value
-            hdr_lines.append(f"  Set-Cookie: {c.name}={val_preview}")
+            hdr_lines.append(f"  Set-Cookie: {c.name} = {mask_secret(c.value)}")
         # 任何含 waf/cf/challenge/verify 的响应头
         for k, v in resp.headers.items():
             if any(t in k.lower() for t in ("waf", "cf-", "challenge", "verify", "x-audit")):
-                hdr_lines.append(f"  {k}: {v[:120]}")
+                hdr_lines.append(f"  {k}: {redact(v)[:120]}")
         feats = diagnose(html)
+        page = _page_summary(html)
+        # 统一推送行格式：状态符号置于站点名之前；本函数仅在签到失败路径被调用
         block = (
-            "\n[诊断] HTTP={code} 最终URL={url}\n"
+            "❌ [诊断] HTTP={code} 最终URL={url}\n"
             "[诊断] 响应头:\n{hdrs}\n"
             "[诊断] WAF类型={wt}\n"
-            "[诊断] WAF命中片段: {snip}\n"
-            "[诊断] 页面前600字符:\n{page}\n"
+            "[诊断] WAF片段特征: {snip}\n"
+            "[诊断] 页面长度={plen} 标题={ptitle}\n"
+            "[诊断] 关键词命中: {hits}\n"
+            "[诊断] 说明: 页面正文与 Cookie 值已脱敏（公开仓库日志安全策略）\n"
         ).format(
             code=resp.status_code,
-            url=resp.url,
+            url=mask_url(resp.url),
             hdrs="\n".join(hdr_lines) if hdr_lines else "  (无关键头)",
             wt=feats.get("waf_type", "未知"),
-            snip=(feats.get("waf_snippet", "") or "(无)")[:400],
-            page=html[:600].replace("\n", " "),
+            snip=(feats.get("waf_snippet", "") or "(无)")[:300],
+            plen=page["len"],
+            ptitle=page["title"],
+            hits=page["hits"],
         )
         write_result(block)
     except Exception as e:
-        write_result(f"\n[诊断] 采集失败: {e}\n")
+        write_result(f"❌ [诊断] 采集失败: {redact(str(e))}")
 
 
 def solve_acw_sc__v2(challenge_html):
@@ -160,7 +230,7 @@ def solve_acw_sc__v2(challenge_html):
         out = subprocess.run([node, path], capture_output=True, text=True, timeout=30)
         return out.stdout.strip() or None
     except Exception as e:
-        print(f"[WARN] 解算 acw_sc__v2 异常: {e}")
+        print(f"[WARN] 解算 acw_sc__v2 异常: {redact(str(e))}")
         return None
     finally:
         if path:
@@ -288,14 +358,15 @@ def fnos_sign():
             sign_result = f"✅ 今日已签到（按钮：{btn_text.strip()}）"
             print(sign_result); write_result(sign_result); return
 
-        print(f"✅ 获取签到参数成功：{sign_code}（按钮：{btn_text}）")
+        # sign code 是签到请求的凭据参数，只打印指纹（可跨运行比对，不可反推）
+        print(f"✅ 获取签到参数成功：{mask_secret(sign_code)}（按钮：{btn_text}）")
 
         print("🚀 正在执行签到...")
         do_sign_url = f"https://club.fnnas.com/plugin.php?id=zqlj_sign&sign={sign_code}"
         resp2 = session.get(do_sign_url, timeout=(10, 30))
         resp2.raise_for_status()
         f2 = diagnose(resp2.text)
-        print("[DEBUG] 签到接口响应特征:", f2)
+        print("[DEBUG] 签到接口响应特征:", redact_obj(f2, 400))
         if not (f2["already_signed"] or f2["logged_in"]):
             print("⚠️ 签到接口未返回预期内容，可能被拦截")
         # 抓取签到接口反馈的奖励信息（今日奖励积分等），写进结果文件
@@ -326,12 +397,14 @@ def fnos_sign():
         ts = ts.group(1) if ts else "获取失败"
         jf = jf.group(1) if jf else "获取失败"
 
-        reward_part = f" | 今日奖励：{reward}" if reward else ""
+        # reward 取自页面文本，过一遍脱敏再上推送（正常只含「今日奖励N积分」，不影响展示）
+        reward_part = f" | 今日奖励：{redact(reward)[:120]}" if reward else ""
         sign_result = f"成功 | 飞牛币：{fnb} | 牛值：{nz} | 登录天数：{ts} | 积分：{jf}{reward_part}"
         print("\n" + sign_result)
 
     except Exception as e:
-        sign_result = f"❌ 签到异常：{str(e)}"
+        # 异常文本常夹带带 sign 参数的 URL 与临时文件路径，须先脱敏再推送
+        sign_result = f"❌ 签到异常：{redact(str(e))}"
         print(sign_result)
 
     write_result(sign_result)

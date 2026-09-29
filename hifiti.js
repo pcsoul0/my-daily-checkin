@@ -88,9 +88,26 @@ async function processSingleAccount(account) {
 }
 
 // 写入 checkin_results.txt（不输出登录用户名）
+// 统一推送行格式：`时间 - <✅/❌> HIFITI论坛签到 详情`
+//   - 状态符号提到站点名之前（接口返回的 message 自带 ✅，原先落在站点名之后）
+//   - 原 record 前置了一个 "\n"，会与上一块尾部的空行叠成 3 个换行，
+//     在 PushPlus 里渲染出 2 个空行，故去掉
 function writeResult(content) {
   try {
-    const record = `\n${formatNow()} - ${siteName} ${content}\n\n`;
+    const now = formatNow();
+    const lines = String(content)
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+    const record =
+      lines
+        .map((line) => {
+          const m = /^([✅❌ℹ️⚠️])\s*(.*)$/.exec(line);
+          const status = m ? m[1] : "ℹ️";
+          const detail = m ? m[2] : line;
+          return `${now} - ${status} ${siteName} ${detail}`;
+        })
+        .join("\n") + "\n\n";
     appendFileSync("checkin_results.txt", record, "utf8");
     console.log("\n✅ 签到结果已成功追加到 checkin_results.txt");
   } catch (err) {

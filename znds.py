@@ -231,15 +231,17 @@ def main():
     try:
         get_formhash_and_login(session, username, password)
         msg, jb, ww, zb, jf = sign_in_and_get_credit_info(session)
-        # 日志内容只写业务信息，时间戳交给 write_result 处理
-        log_message = f"智能电视网 签到成功 | 结果：{msg} | 金币：{jb} | 威望：{ww} | Z币：{zb} | 积分：{jf}"
+        # 站点返回的提示语只进 Actions 日志（原「结果：未知」无信息量，不进推送）
+        print(f"[INFO] 站点返回：{msg}")
+        # 日志内容只写业务信息，时间戳交给 write_result 处理；✅ 统一置于站点名之前
+        log_message = f"✅ 智能电视网 签到成功 | 金币：{jb} | 威望：{ww} | Z币：{zb} | 积分：{jf}"
         print(log_message)
         
         # 写入 checkin_results.txt
         write_result(log_message)
 
     except Exception as e:
-        error_msg = f"智能电视网 签到失败 | 原因：{str(e)}"
+        error_msg = f"❌ 智能电视网 签到失败 | 原因：{str(e)}"
         print(error_msg)
         
         # 失败也写入日志

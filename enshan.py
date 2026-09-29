@@ -153,9 +153,10 @@ def run_sign_in():
         except Exception as e:
             print(f"❌ 数据解析异常: {e}")
 
+        # 总积分为累计量、每日几乎不变，无推送价值；仍保留在上一行 print 中供 Actions 日志核查
         notify = (f"✅ 恩山论坛签到成功(Sitoi方案) | 今日积分：{today_points} | "
                   f"连续签到：{continuous_days}天 | 总天数：{total_days}天 | "
-                  f"总积分：{total_points} | 贡献：{contribution} | 恩山币：{enshan_coin}")
+                  f"贡献：{contribution} | 恩山币：{enshan_coin}")
         print("=== 签到结果 ===")
         print(notify)
         write_result(notify)

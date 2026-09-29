@@ -20,7 +20,12 @@ import hashlib
 import json
 import re
 
-__all__ = ["redact", "redact_obj", "mask_secret", "mask_uid", "mask_path"]
+__all__ = ["redact", "redact_obj", "mask_secret", "mask_uid", "mask_path", "mask_url"]
+
+# 需要打码的凭据类 URL 参数名 —— redact() 的规则 7 与 mask_url() 共用同一份名单，
+# 避免两处各写一份后逐渐不同步。
+_CRED_PARAM = (r"sign|signature|code|token|access_?token|refresh_?token|key|api_?key|secret|"
+               r"session|session_?id|sid|auth|acw_sc__v2|acw_tc|cdn_sec_tc|verify|challenge")
 
 # 脱敏规则，按顺序应用：先整字段打码，再兜底裸值，避免漏网。
 _RULES = (
@@ -40,6 +45,9 @@ _RULES = (
     (re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)"), "***"),
     # 6) 邮箱
     (re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}"), "***"),
+    # 7) URL query 中的凭据类参数值（sign / code / token / WAF 挑战 cookie 等），
+    #    这类值不带引号，前面的「字段打码」规则覆盖不到
+    (re.compile(r"(?i)([?&](?:%s)=)[^&\s\"'<>]*" % _CRED_PARAM), r"\1***"),
 )
 
 # 主目录段匹配：Windows 的 \Users\<name>、macOS 的 /Users/<name>、Linux 的 /home/<name>
@@ -85,3 +93,18 @@ def mask_path(path):
     if not isinstance(path, str) or not path:
         return "***"
     return _HOME_SEG.sub(r"\1***", path)
+
+
+_QUERY_CRED = re.compile(r"(?i)([?&](?:%s)=)[^&\s#\"'<>]*" % _CRED_PARAM)
+
+
+def mask_url(url):
+    """URL 脱敏：只打码凭据类 query 参数的值，其余参数原样保留。
+
+    用于诊断信息里的「最终 URL」——主机、路径和 `id=zqlj_sign` 这类非敏感
+    参数是排障关键（能看出是否被重定向到登录/验证页），而 sign code、会话号
+    等凭据必须抹掉。
+    """
+    if not isinstance(url, str) or not url:
+        return "***"
+    return _QUERY_CRED.sub(r"\1***", url)
