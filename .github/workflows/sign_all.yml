@@ -6,10 +6,51 @@ name: 每日签到总调度
 # 最后由 daily_push.py 汇总并通过 PushPlus 推送。
 # 所有签到步骤均为 continue-on-error，单个站点失败不中断后续任务；
 # 成败信息统一体现在 PushPlus 推送内容中（不依赖 Actions 失败邮件）。
+#
+# 手动补跑：Actions 页面 → Run workflow → 勾选要跑的站点。常用于某个站点当日失败后
+#           单独补跑。一个都不勾 = 按常规跑全部站点（与定时触发完全一致）。
 on:
   schedule:
     - cron: '51 15 * * *'   # UTC 15:51 = 北京时间 23:51（GitHub 定时调度实测中位延迟约 1.5 小时）
+  # 勾选项仅对 workflow_dispatch（手动触发）生效；schedule 触发时忽略，恒为「跑全部」。
   workflow_dispatch:
+    inputs:
+      enshan:
+        description: '恩山论坛（enshan.py）'
+        type: boolean
+        default: false
+      fnclub:
+        description: '飞牛社区（fnclub.py）'
+        type: boolean
+        default: false
+      znds:
+        description: '智能电视网（znds.py）'
+        type: boolean
+        default: false
+      hifiti:
+        description: 'HIFITI（hifiti.js，需 Node）'
+        type: boolean
+        default: false
+      workbuddy:
+        description: 'WorkBuddy 积分签到（workbuddy_checkin.py）'
+        type: boolean
+        default: false
+      ima:
+        description: '腾讯 ima 每日登录领算力（ima_checkin.py）'
+        type: boolean
+        default: false
+      bilibili:
+        description: '哔哩哔哩每日任务（bilibili_checkin.py）'
+        type: boolean
+        default: false
+      rainyun:
+        description: '雨云每日签到（rainyun_checkin.py）'
+        type: boolean
+        default: false
+      skip_push:
+        description: '跳过 PushPlus 推送（仅调试用，结果看 Actions 日志）'
+        type: boolean
+        default: false
 
 # contents: write 仅为末尾「保活心跳」步骤推送 .heartbeat 所需；
 # 本工作流仅由 schedule / workflow_dispatch 触发，不存在 PR 注入面。
@@ -31,7 +72,60 @@ jobs:
       - name: 安装依赖
         run: pip install requests
 
+      # ── 解析本次要运行的站点 ───────────────────────────────────────────────
+      # schedule 触发 → 全部运行；workflow_dispatch 触发 → 只运行勾选项，
+      # 一个都没勾则回退为「全部运行」。
+      # 结果写入 step output（每站点一个 true/false），供后续步骤用 if 判断。
+      - name: 解析本次要运行的站点
+        id: pick
+        env:
+          EVENT: ${{ github.event_name }}
+          IN_ENSHAN: ${{ inputs.enshan }}
+          IN_FNCLUB: ${{ inputs.fnclub }}
+          IN_ZNDS: ${{ inputs.znds }}
+          IN_HIFITI: ${{ inputs.hifiti }}
+          IN_WORKBUDDY: ${{ inputs.workbuddy }}
+          IN_IMA: ${{ inputs.ima }}
+          IN_BILIBILI: ${{ inputs.bilibili }}
+          IN_RAINYUN: ${{ inputs.rainyun }}
+        run: |
+          python - <<'PY'
+          import os
+
+          SITES = ["enshan", "fnclub", "znds", "hifiti",
+                   "workbuddy", "ima", "bilibili", "rainyun"]
+          LABEL = {"enshan": "恩山论坛", "fnclub": "飞牛社区", "znds": "智能电视网",
+                   "hifiti": "HIFITI", "workbuddy": "WorkBuddy", "ima": "腾讯 ima",
+                   "bilibili": "哔哩哔哩", "rainyun": "雨云"}
+
+          event = os.environ.get("EVENT", "")
+          if event == "workflow_dispatch":
+              picked = [s for s in SITES
+                        if os.environ.get("IN_" + s.upper()) == "true"]
+              if not picked:
+                  picked = SITES            # 一个都没勾 = 全部
+          else:
+              picked = SITES                # schedule 等其他触发 = 全部
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              for s in SITES:
+                  fh.write("%s=%s\n" % (s, "true" if s in picked else "false"))
+
+          print("触发方式: %s" % event)
+          print("本次运行站点(%d): %s" % (len(picked), "、".join(LABEL[s] for s in picked)))
+
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a", encoding="utf-8") as fh:
+                  if len(picked) == len(SITES):
+                      fh.write("### 本次运行：全部 %d 个站点\n" % len(SITES))
+                  else:
+                      fh.write("### 本次运行：%d / %d 个站点\n" % (len(picked), len(SITES)))
+                  fh.write("\n%s\n" % "、".join(LABEL[s] for s in picked))
+          PY
+
       - name: 恩山论坛签到
+        if: steps.pick.outputs.enshan == 'true'
         env:
           ESHAN_COOKIE: ${{ secrets.ESHAN_COOKIE }}
           USER_UID: ${{ secrets.USER_UID }}
@@ -39,30 +133,36 @@ jobs:
         continue-on-error: true
 
       - name: 飞牛社区签到
+        if: steps.pick.outputs.fnclub == 'true'
         env:
           FNOS_COOKIE: ${{ secrets.FNOS_COOKIE }}
         run: python fnclub.py
         continue-on-error: true
 
       - name: 智能电视网签到
+        if: steps.pick.outputs.znds == 'true'
         env:
           ZNDS_USERNAME: ${{ secrets.ZNDS_USERNAME }}
           ZNDS_PASSWORD: ${{ secrets.ZNDS_PASSWORD }}
         run: python znds.py
         continue-on-error: true
 
+      # Node 仅 HIFITI 需要；只跑 Python 站点时跳过，省一次 setup-node。
       - name: 安装 Node
+        if: steps.pick.outputs.hifiti == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: HIFITI 签到
+        if: steps.pick.outputs.hifiti == 'true'
         env:
           ACCOUNTS: ${{ secrets.HIFITI_ACCOUNTS }}
         run: node hifiti.js
         continue-on-error: true
 
       - name: WorkBuddy 签到
+        if: steps.pick.outputs.workbuddy == 'true'
         env:
           WB_TOKEN: ${{ secrets.WB_TOKEN }}       # Bearer accessToken（必填）
           WB_UID: ${{ secrets.WB_UID }}           # 账号 uid（必填）
@@ -72,6 +172,7 @@ jobs:
         continue-on-error: true
 
       - name: ima 每日登录领算力
+        if: steps.pick.outputs.ima == 'true'
         env:
           # refresh 模式凭据 JSON（user_id/refresh_token/token_type/static_fields），
           # 长效 30 天；脚本每次运行先调 auth_login/refresh 换新 access token，绕开 2h TTL。
@@ -80,6 +181,7 @@ jobs:
         continue-on-error: true
 
       - name: 哔哩哔哩每日任务
+        if: steps.pick.outputs.bilibili == 'true'
         env:
           BILIBILI_COOKIE: ${{ secrets.BILIBILI_COOKIE }}   # Cookie 全文（必填）
           # 以下几项为非敏感配置，不设即用脚本内默认值（投币 1 枚 + 分享 + 观看）。
@@ -95,13 +197,15 @@ jobs:
       # 雨云是「API Key 纯 HTTP + 不绕验证码」方案：风控命中时会判「需人工验证码」并跳过，
       # 属预期行为（详见 rainyun_checkin.py 头部说明），不视为流水线故障。
       - name: 雨云每日签到
+        if: steps.pick.outputs.rainyun == 'true'
         env:
           RAINYUN_API_KEY: ${{ secrets.RAINYUN_API_KEY }}   # 雨云后台「用户中心 → API 密钥」生成
         run: python rainyun_checkin.py
         continue-on-error: true
 
       - name: PushPlus 汇总通知
-        if: always()
+        # skip_push 只存在于手动触发；schedule 触发的 inputs 为空，表达式仍为真。
+        if: ${{ always() && inputs.skip_push != true }}
         env:
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
         run: python daily_push.py

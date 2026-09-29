@@ -33,7 +33,8 @@
 
 ## 运行流程
 
-- **`sign_all.yml`（每日签到总调度）**：每天北京时间 **23:51**（cron `51 15 * * *` UTC，GitHub 定时可能有 0~30 分钟延迟）顺序执行恩山 → 飞牛 → 智能电视网 → HIFITI → WorkBuddy → ima → 哔哩哔哩 → 雨云 八个签到，最后统一推送 PushPlus。也支持在 Actions 页面手动触发。
+- **`sign_all.yml`（每日签到总调度）**：每天北京时间 **23:51**（cron `51 15 * * *` UTC，GitHub 定时可能有 0~30 分钟延迟）顺序执行恩山 → 飞牛 → 智能电视网 → HIFITI → WorkBuddy → ima → 哔哩哔哩 → 雨云 八个签到，最后统一推送 PushPlus。
+- **手动补跑指定站点**：Actions → 每日签到总调度 → **Run workflow**，在表单里勾选要跑的站点，则**只跑勾选项**（常用于某个站点当日失败后单独补跑，不必等次日、也不会重复跑其他站点）；**一个都不勾 = 跑全部**，与定时触发完全一致。另有 `skip_push` 选项可在调试时不发推送。
 - **失败隔离**：所有签到步骤均为 `continue-on-error: true`，单个站点失败不会中断后续任务；成败信息统一体现在 PushPlus 推送内容中（不依赖 Actions 失败邮件）。
 - 签到结果只写入本地临时文件 `checkin_results.txt`（已被 `.gitignore` 忽略），推送 PushPlus 后清空，**不写入 README、不提交到仓库**。
 - 所有凭据通过 GitHub Secrets 注入环境变量，代码中不含任何敏感信息；脚本输出已脱敏（不打印用户名/Cookie/Token）。
@@ -208,7 +209,7 @@ gh secret set IMA_REFRESH --repo <owner>/<repo> < ima_refresh.info
 ```
 .
 ├── .github/workflows/
-│   └── sign_all.yml        # 每日总调度（北京时间 23:51，八站点串行 + PushPlus 汇总）
+│   └── sign_all.yml        # 每日总调度（23:51 八站点串行 + PushPlus 汇总；支持手动勾选站点补跑）
 ├── .heartbeat              # 保活时间戳（工作流自动提交，约每 45 天 1 次，见「保活心跳」）
 ├── enshan.py               # 恩山论坛签到
 ├── fnclub.py               # 飞牛论坛签到（含 WAF 解算）
@@ -230,6 +231,8 @@ gh secret set IMA_REFRESH --repo <owner>/<repo> < ima_refresh.info
 - **定时**：`sign_all.yml` cron `51 15 * * *`（UTC）= 北京 23:51，选冷门分钟以降低触发延迟
   （GitHub 定时触发仍可能有 0~30 分钟延迟）。
 - **手动触发**：Actions → 每日签到总调度 → Run workflow。
+  表单里勾选站点 = 只跑勾选项（不勾 = 跑全部）；勾 `skip_push` 则只跑不推送，便于调试。
+  该开关只对手动触发生效，定时触发恒为「跑全部」，行为不受影响。
 - **本地调试**：`WB_TOKEN=xxx WB_UID=xxx python workbuddy_checkin.py`；
   `IMA_REFRESH` 模式把凭据 JSON 存 `ima_refresh.info`（凭据文件均已 gitignore）。
 - **退出码**：`workbuddy_checkin.py` / `ima_checkin.py` / `bilibili_checkin.py` / `rainyun_checkin.py` 一致 —— `0` 成功/已签，
