@@ -146,6 +146,7 @@ gh secret set IMA_REFRESH --repo <owner>/<repo> < ima_refresh.info
 .
 ├── .github/workflows/
 │   └── sign_all.yml        # 每日总调度（北京时间 23:51，六站点串行 + PushPlus 汇总）
+├── .heartbeat              # 保活时间戳（工作流自动提交，约每 45 天 1 次，见「保活心跳」）
 ├── enshan.py               # 恩山论坛签到
 ├── fnclub.py               # 飞牛论坛签到（含 WAF 解算）
 ├── znds.py                 # 智能电视网签到
@@ -169,6 +170,15 @@ gh secret set IMA_REFRESH --repo <owner>/<repo> < ima_refresh.info
 - **退出码**：`workbuddy_checkin.py` / `ima_checkin.py` 一致 —— `0` 成功/已签，
   `2` 配置缺失，`4` 网络失败，`5` API 拒绝（含凭据失效）。
 - **安全红线**：token / uid / cookie 只进 Secrets，不进代码和日志。
+- **保活心跳**：公开仓库的定时工作流若连续 **60 天**无「仓库活动」（即无 commit push），
+  会被 GitHub **自动停用**。本仓库常规运行只读代码、结果仅写本地并推送 PushPlus，
+  **不产生任何 commit**，等于零活动 —— 转公开后第 60 天签到会被静默停掉。
+  `sign_all.yml` 末尾的「保活心跳」步骤会在「距上次提交 > 45 天」时自动提交一个
+  仅含时间戳的 `.heartbeat` 文件刷新计时器（约每 45 天 1 次，一年约 8 个 commit）。
+  阈值取 45 而非 60，是为调度延迟与偶发漏跑留余量；**工作流一旦被停用，schedule 便
+  不再触发，心跳也救不回来**，所以不能把阈值贴到 60。
+  该步骤需 `permissions: contents: write`（本工作流仅由 schedule / workflow_dispatch
+  触发，无 PR 注入面，故可开写权限）。
 
 ## 日志安全
 

@@ -10,8 +10,10 @@ on:
     - cron: '51 15 * * *'   # UTC 15:51 = 北京时间 23:51（GitHub 定时调度实测中位延迟约 1.5 小时）
   workflow_dispatch:
 
+# contents: write 仅为末尾「保活心跳」步骤推送 .heartbeat 所需；
+# 本工作流仅由 schedule / workflow_dispatch 触发，不存在 PR 注入面。
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   sign-all:
@@ -82,3 +84,39 @@ jobs:
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
         run: python daily_push.py
         continue-on-error: true
+
+      # ── 保活心跳 ─────────────────────────────────────────────────────────
+      # 规则：公开仓库的定时工作流若连续 60 天无「仓库活动」（即无 commit push），
+      #       会被 GitHub 自动停用（官方文档 Disabling and enabling a workflow）。
+      # 现状：常规运行只读代码、结果仅写本地并推送 PushPlus，不产生任何 commit，
+      #       等于零活动 —— 转公开后第 60 天签到会被静默停掉。
+      # 对策：每次运行检查最近一次提交时间，超过 45 天就提交一个只含时间戳的
+      #       .heartbeat 文件刷新计时器。阈值取 45 而非 60，留出调度延迟余量。
+      # 频率：约每 45 天 1 次，一年约 8 个 commit。
+      # 另有：工作流一旦被停用，schedule 不再触发，本步骤也救不回来 —— 所以阈值必须
+      #       显著小于 60 天。
+      - name: 保活心跳（防 60 天无活动被停用）
+        if: always()
+        continue-on-error: true
+        run: |
+          set -eu
+          LAST=$(git log -1 --format=%ct)
+          NOW=$(date -u +%s)
+          DAYS=$(( (NOW - LAST) / 86400 ))
+          echo "最近一次提交距今 ${DAYS} 天，保活阈值 45 天"
+          if [ "$DAYS" -lt 45 ]; then
+            echo "未达阈值，跳过心跳提交（本次不产生 commit）"
+            exit 0
+          fi
+          BRANCH="${GITHUB_REF_NAME}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          printf 'heartbeat at %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .heartbeat
+          git add .heartbeat
+          git commit -m "chore(keepalive): 定时任务存活心跳（避免 60 天无活动被自动停用）"
+          git push origin "HEAD:refs/heads/${BRANCH}" || {
+            echo "推送失败，rebase 后重试一次"
+            git pull --rebase origin "${BRANCH}"
+            git push origin "HEAD:refs/heads/${BRANCH}"
+          }
+          echo "心跳提交完成，计时器已重置"
