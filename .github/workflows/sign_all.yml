@@ -78,6 +78,19 @@ jobs:
         run: python ima_checkin.py
         continue-on-error: true
 
+      - name: 哔哩哔哩每日任务
+        env:
+          BILIBILI_COOKIE: ${{ secrets.BILIBILI_COOKIE }}   # Cookie 全文（必填）
+          # 以下几项为非敏感配置，不设即用脚本内默认值（投币 1 枚 + 分享 + 观看）。
+          # 需调整时取消注释即可：
+          # TASK_CONFIG: add_coin,share_video,watch_video,manga_sign,silver2coin,link_sign
+          # （live_sign 直播签到因 B 站活动下线已无实际作用，一般不开启）
+          # COIN_ADD_NUM: '1'          # 每日投币数量，0 = 关闭投币
+          # COIN_SELECT_LIKE: '1'      # 投币时是否同时点赞
+          # COIN_VIDEO_SOURCE: ranking # 投币目标来源：ranking（默认）或 dynamic
+        run: python bilibili_checkin.py
+        continue-on-error: true
+
       - name: PushPlus 汇总通知
         if: always()
         env:

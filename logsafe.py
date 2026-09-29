@@ -84,7 +84,13 @@ def mask_secret(secret):
 
 
 def mask_uid(uid):
-    """uid 脱敏：与 mask_secret 同策略，保留指纹以便跨运行比对是否换了账号。"""
+    """uid 脱敏：与 mask_secret 同策略，保留指纹以便跨运行比对是否换了账号。
+
+    注意：各平台的 uid 常为数字（如 B 站 mid、部分论坛的 uid），
+    统一先转字符串再取指纹，否则会退化成 *** 而丢失可比对性。
+    """
+    if isinstance(uid, (int, float)) and not isinstance(uid, bool):
+        uid = str(uid)
     return mask_secret(uid)
 
 

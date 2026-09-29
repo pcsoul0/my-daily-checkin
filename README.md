@@ -1,6 +1,6 @@
 # my-daily-checkin
 
-基于 GitHub Actions 的多站点每日自动签到合集：4 个论坛 + WorkBuddy 积分签到 + 腾讯 ima 每日登录领算力。定时任务在云端运行，签到结果通过 [PushPlus](https://www.pushplus.plus/) 推送到微信，仓库本身不保存任何运行记录。
+基于 GitHub Actions 的多站点每日自动签到合集：4 个论坛 + WorkBuddy 积分签到 + 腾讯 ima 每日登录领算力 + 哔哩哔哩每日任务。定时任务在云端运行，签到结果通过 [PushPlus](https://www.pushplus.plus/) 推送到微信，仓库本身不保存任何运行记录。
 
 > 本项目仅供学习交流，请遵守各站点用户协议，请勿用于商业用途。
 
@@ -14,6 +14,7 @@
 | `hifiti.js` | HIFITI 论坛 (hifiti.com) | Node 纯 HTTP 签到，支持 JSON 数组多账号并发，带网络层重试（移植自 [ewigl/hifini-auto-checkin](https://github.com/ewigl/hifini-auto-checkin)） | `HIFITI_ACCOUNTS` |
 | `workbuddy_checkin.py` | WorkBuddy (copilot.tencent.com) | Bearer 认证调 `daily-checkin`，幂等（`code=10001` 视为已签），成功后抓取积分概览（签到逻辑参考 [wangmingdong/workbuddy-signin](https://github.com/wangmingdong/workbuddy-signin)） | `WB_TOKEN`、`WB_UID` |
 | `ima_checkin.py` | 腾讯 ima (ima.qq.com) | refresh 模式换新 access token 后调 `daily_login_activity`，先查后签，含满签奖励延迟解锁重试 | `IMA_REFRESH` |
+| `bilibili_checkin.py` | 哔哩哔哩 (bilibili.com) | Cookie 认证，默认执行投币 / 分享 / 观看视频每日任务（投币带来源回退与已投去重）；漫画签到 / 银瓜子兑换 / 应援团签到可用 `TASK_CONFIG` 按需开启。写 `checkin_results.txt` 交汇总，不自行推送 | `BILIBILI_COOKIE` |
 | `daily_push.py` | PushPlus | 汇总本轮所有签到结果，HTML 模板推送到微信，推送后清空结果文件 | `PUSHPLUS_TOKEN` |
 
 ## 上游项目与二次开发说明
@@ -25,12 +26,13 @@
 | `hifiti.js` | [ewigl/hifini-auto-checkin](https://github.com/ewigl/hifini-auto-checkin) 的 `main.js` | 移植 | ① 新增 `fetchWithRetry`：网络层瞬时错误（`fetch failed` / ECONN / ETIMEDOUT / ENOTFOUND / EAI_AGAIN）与 HTTP 5xx 按指数退避重试 3 次，单次请求 20s 超时；② 「今天已经签过啦」由上游的精确相等改为 `includes` 包含匹配，兼容站点提示语前缀变动；③ 结果写入 `checkin_results.txt` 交 `daily_push.py` 统一推送，替代上游写入 `GITHUB_OUTPUT`；④ 日志脱敏，不再输出账号名 |
 | `workbuddy_checkin.py` | [wangmingdong/workbuddy-signin](https://github.com/wangmingdong/workbuddy-signin) 的 `workbuddy_checkin.py` | 参考签到逻辑 | ① 凭据来源改为环境变量优先（GitHub Secrets 注入），本地 token 文件仅作调试兜底；② **删除 `checkin-status` 预检**，直接调幂等的 `daily-checkin`（`code=10001` 即今日已签），规避上游 `today_checked_in` 字段假阳性导致的漏签；③ 瞬时网络错误自动重试 3 次；④ 结果写入 `GITHUB_STEP_SUMMARY` 与 `checkin_results.txt`；⑤ 全程不打印 token 本体 |
 | `enshan.py` | [Sitoi/dailycheckin](https://github.com/Sitoi/dailycheckin) | 思路参考 | 纯 HTTP 签到实现，自行提取 formhash 并解析积分 |
+| `bilibili_checkin.py` | [pcsoul0/bilibili_checkin](https://github.com/pcsoul0/bilibili_checkin)（MIT，派生自 [dangks/bilibili_checkin](https://github.com/dangks/bilibili_checkin)） | 移植 | ① 去掉 `loguru` 依赖改用 `print`，Actions 端只需装 `requests`；② 去掉源的独立 PushPlus 推送（`main.py` + `push.py`），改由 `daily_push.py` 统一汇总，避免每天收到两条推送；③ **日志脱敏**：源 `push.py` 把 B 站昵称原样推送到第三方，本仓库不打印昵称、仅输出 UID 哈希指纹，并把源 `mask_string()` / `mask_uid()` 的弱脱敏（保留首字符 / 前 2 位）统一改用 `logsafe`；④ 推送逻辑移除后，端点不再涉及源的明文 `http://`；⑤ 所有 HTTP 请求补 20s 超时（源未设，网络异常会长时间挂住）；⑥ 退出码对齐本仓库约定；⑦ 默认任务收紧为 `add_coin,share_video,watch_video`（源默认为 `manga_sign,share_video,add_coin,silver2coin,link_sign`），漫画 / 银瓜子 / 应援团功能保留、按需用 `TASK_CONFIG` 开启 |
 
 > ⚠️ 上游 `ewigl/hifini-auto-checkin` 仓库未声明开源许可证（核实日期 2026-09-29）。沿用其代码前，建议自行确认授权范围。
 
 ## 运行流程
 
-- **`sign_all.yml`（每日签到总调度）**：每天北京时间 **00:09**（cron `9 16 * * *` UTC，GitHub 定时可能有 0~30 分钟延迟）顺序执行恩山 → 飞牛 → 智能电视网 → HIFITI → WorkBuddy → ima 六个签到，最后统一推送 PushPlus。也支持在 Actions 页面手动触发。
+- **`sign_all.yml`（每日签到总调度）**：每天北京时间 **23:51**（cron `51 15 * * *` UTC，GitHub 定时可能有 0~30 分钟延迟）顺序执行恩山 → 飞牛 → 智能电视网 → HIFITI → WorkBuddy → ima → 哔哩哔哩 七个签到，最后统一推送 PushPlus。也支持在 Actions 页面手动触发。
 - **失败隔离**：所有签到步骤均为 `continue-on-error: true`，单个站点失败不会中断后续任务；成败信息统一体现在 PushPlus 推送内容中（不依赖 Actions 失败邮件）。
 - 签到结果只写入本地临时文件 `checkin_results.txt`（已被 `.gitignore` 忽略），推送 PushPlus 后清空，**不写入 README、不提交到仓库**。
 - 所有凭据通过 GitHub Secrets 注入环境变量，代码中不含任何敏感信息；脚本输出已脱敏（不打印用户名/Cookie/Token）。
@@ -42,7 +44,9 @@
    - Cookie 类：浏览器登录站点后，从开发者工具 Network 面板复制请求头中的 `Cookie` 字段；
    - `HIFITI_ACCOUNTS` 为 JSON 数组：`[{"cookie": "xxx"}, {"cookie": "yyy"}]`；
    - `WB_TOKEN` / `WB_UID`：见下文「WorkBuddy token 续期」；
-   - `IMA_REFRESH`：见下文「ima 凭据抓取与续期」。
+   - `IMA_REFRESH`：见下文「ima 凭据抓取与续期」；
+   - `BILIBILI_COOKIE`：B 站 Cookie 全文，须含 `SESSDATA` 与 `bili_jct`（后者作为写操作的 csrf 参数，缺失会导致投币/分享静默失败）。
+   - 哔哩哔哩可选变量（均有默认值，不配也能跑）：`TASK_CONFIG`（默认 `add_coin,share_video,watch_video`；可追加 `live_sign` / `manga_sign` / `silver2coin` / `link_sign`，逗号分隔）、`COIN_ADD_NUM`（每日投币数，默认 `1`）、`COIN_SELECT_LIKE`（投币时是否同时点赞，`1`/`0`，默认 `1`）、`COIN_VIDEO_SOURCE`（投币视频来源 `ranking` / `dynamic`，默认 `ranking`）。
 3. 在 **Actions** 页面对 `每日签到总调度` 手动 **Run workflow** 验证，微信收到 PushPlus 推送即部署成功。
 
 ## WorkBuddy token 续期（约 1~2 个月一次）
@@ -145,7 +149,7 @@ gh secret set IMA_REFRESH --repo <owner>/<repo> < ima_refresh.info
 ```
 .
 ├── .github/workflows/
-│   └── sign_all.yml        # 每日总调度（北京时间 23:51，六站点串行 + PushPlus 汇总）
+│   └── sign_all.yml        # 每日总调度（北京时间 23:51，七站点串行 + PushPlus 汇总）
 ├── .heartbeat              # 保活时间戳（工作流自动提交，约每 45 天 1 次，见「保活心跳」）
 ├── enshan.py               # 恩山论坛签到
 ├── fnclub.py               # 飞牛论坛签到（含 WAF 解算）
@@ -153,6 +157,7 @@ gh secret set IMA_REFRESH --repo <owner>/<repo> < ima_refresh.info
 ├── hifiti.js               # HIFITI 论坛签到（Node，多账号）
 ├── workbuddy_checkin.py    # WorkBuddy 积分签到
 ├── ima_checkin.py          # 腾讯 ima 每日登录领算力
+├── bilibili_checkin.py     # 哔哩哔哩每日任务（投币 / 分享 / 观看）
 ├── renew_token.py          # WorkBuddy token 一键续期（本机运行）
 ├── daily_push.py           # PushPlus 汇总推送
 ├── logsafe.py              # 日志脱敏工具（所有脚本共用，见下方「日志安全」）
@@ -167,7 +172,7 @@ gh secret set IMA_REFRESH --repo <owner>/<repo> < ima_refresh.info
 - **手动触发**：Actions → 每日签到总调度 → Run workflow。
 - **本地调试**：`WB_TOKEN=xxx WB_UID=xxx python workbuddy_checkin.py`；
   `IMA_REFRESH` 模式把凭据 JSON 存 `ima_refresh.info`（凭据文件均已 gitignore）。
-- **退出码**：`workbuddy_checkin.py` / `ima_checkin.py` 一致 —— `0` 成功/已签，
+- **退出码**：`workbuddy_checkin.py` / `ima_checkin.py` / `bilibili_checkin.py` 一致 —— `0` 成功/已签，
   `2` 配置缺失，`4` 网络失败，`5` API 拒绝（含凭据失效）。
 - **安全红线**：token / uid / cookie 只进 Secrets，不进代码和日志。
 - **保活心跳**：公开仓库的定时工作流若连续 **60 天**无「仓库活动」（即无 commit push），
@@ -204,3 +209,7 @@ gh secret set IMA_REFRESH --repo <owner>/<repo> < ima_refresh.info
 ## License
 
 [MIT](LICENSE)
+
+其中 `bilibili_checkin.py` 移植自 [pcsoul0/bilibili_checkin](https://github.com/pcsoul0/bilibili_checkin)
+（该 fork 派生自 [dangks/bilibili_checkin](https://github.com/dangks/bilibili_checkin)），
+沿用其 MIT 许可，原始版权声明 `Copyright (c) 2025 Dangks` 保留在源项目仓库。
