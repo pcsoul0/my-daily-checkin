@@ -15,7 +15,6 @@
 | `workbuddy_checkin.py` | WorkBuddy (copilot.tencent.com) | Bearer 认证调 `daily-checkin`，幂等（`code=10001` 视为已签），成功后抓取积分概览（签到逻辑参考 [wangmingdong/workbuddy-signin](https://github.com/wangmingdong/workbuddy-signin)） | `WB_TOKEN`、`WB_UID` |
 | `ima_checkin.py` | 腾讯 ima (ima.qq.com) | refresh 模式换新 access token 后调 `daily_login_activity`，先查后签，含满签奖励延迟解锁重试 | `IMA_REFRESH` |
 | `daily_push.py` | PushPlus | 汇总本轮所有签到结果，HTML 模板推送到微信，推送后清空结果文件 | `PUSHPLUS_TOKEN` |
-| `notify.py` | PushPlus | 独立推送工具函数，可被其他脚本 import 复用或单独测试 | `PUSHPLUS_TOKEN` |
 
 ## 上游项目与二次开发说明
 
@@ -155,7 +154,6 @@ gh secret set IMA_REFRESH --repo <owner>/<repo> < ima_refresh.info
 ├── ima_checkin.py          # 腾讯 ima 每日登录领算力
 ├── renew_token.py          # WorkBuddy token 一键续期（本机运行）
 ├── daily_push.py           # PushPlus 汇总推送
-├── notify.py               # PushPlus 推送工具函数
 └── tools/
     └── capture_ima.js      # ima 登录态抓取（本机一次性运行，需 playwright-core）
 ```
