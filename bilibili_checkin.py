@@ -5,25 +5,14 @@
 并入 my-daily-checkin：由 sign_all.yml 统一调度，结果追加写入 checkin_results.txt，
 交给 daily_push.py 汇总后经 PushPlus 推送。
 
-参考源：pcsoul0/bilibili_checkin（本仓库作者个人的 fork，MIT License）。
+参考源：dangks/bilibili_checkin（MIT License，Copyright (c) 2025 Dangks）。
 
-该 fork 派生自 dangks/bilibili_checkin（Copyright (c) 2025 Dangks），并在上游之上有
-12 次自有提交（2026-09-03），功能增强包括：银瓜子兑换硬币（silver2coin）、应援团签到
-（改用 link_setting/sign_in + group_id/owner_id，并移除失效的 UserMedalList）、
-投币前过滤已投视频、投币默认改 ranking 并带回退、漫画签到 invalid_argument 视为成功、
-移除已下线的直播签到。
-
-本文件即基于该 fork 移植，对应源文件摘要（sha256 前 16 位 / 字节数）：
-  bilibili.py  ec82131f42028ca5  9303
-  main.py      7ede375baf39ef79  9388
-  push.py      47a347075857a6e7  1618
-
-本文件在源基础上按本仓库约定做了以下适配：
+本文件在该项目基础上按本仓库约定做了以下适配：
 
 1. **去掉 loguru 依赖**，改用 print —— 与仓库其他脚本一致，Actions 只需 pip install requests；
 2. **去掉独立推送**（源的 main.py + push.py 会自行发 PushPlus），改由 daily_push.py
    统一汇总推送一次，避免每天收到两条推送；
-3. **日志脱敏**（源存在的问题，本文件已消除；源与上游在此处一致，fork 未改动）：
+3. **日志脱敏**（源存在的问题，本文件已消除）：
    - 源的 push.py 把 B 站昵称（uname）原样拼进推送正文，经 PushPlus（第三方）出网；
      本文件不打印昵称，仅输出 UID 的哈希指纹用于跨运行比对账号是否变更；
    - 源的 mask_string()/mask_uid()（定义在 main.py）保留首字符/前 2 位，属弱脱敏；
@@ -32,9 +21,7 @@
 4. **推送端点统一 https**（源的 push.py 使用明文 http，本仓库已全部改 https）；
 5. 所有 HTTP 请求补 timeout，来源版本未设超时，网络异常时会长时间挂住；
 6. 退出码对齐本仓库约定；
-7. **默认任务按本仓库风格收紧**：源默认 TASK_CONFIG =
-   manga_sign,share_video,add_coin,silver2coin,link_sign；本文件默认
-   add_coin,share_video,watch_video（另含源没有的 watch_video 观看视频）。
+7. **默认任务按本仓库风格收紧**为 add_coin,share_video,watch_video；
    漫画签到 / 银瓜子兑换 / 应援团签到功能代码全部保留，在 Secrets 里配
    TASK_CONFIG 即可开启，无需改代码。
 
@@ -100,7 +87,7 @@ def write_result(content):
 # ────────────────────────── B 站 API 封装 ──────────────────────────
 
 class BilibiliTask:
-    """B 站任务封装。参考源 pcsoul0/bilibili_checkin（MIT，派生自 dangks/bilibili_checkin）。
+    """B 站任务封装。参考源 dangks/bilibili_checkin（MIT）。
 
     说明：所有方法返回 (bool, str) 二元组，str 为可直接进推送的简短描述。
     """
