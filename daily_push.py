@@ -9,6 +9,8 @@ import os
 import requests
 from datetime import datetime, timedelta, timezone
 
+from logsafe import redact
+
 # ===================== 配置 =====================
 PUSHPLUS_TOKEN = os.getenv("PUSHPLUS_TOKEN")
 RESULTS_FILE = "checkin_results.txt"
@@ -44,7 +46,7 @@ def push(content):
         print("ℹ️ 无签到结果，跳过推送")
         return True
 
-    url = "https://www.pushplus.plus/send"
+    url = "http://www.pushplus.plus/send"
     data = {
         "token": PUSHPLUS_TOKEN,
         "title": f"签到日志汇总 {beijing_time()}",
@@ -58,10 +60,10 @@ def push(content):
             print("✅ 推送成功")
             return True
         else:
-            print(f"❌ 推送失败：{r.text}")
+            print(f"❌ 推送失败：{redact(r.text)[:300]}")
             return False
     except Exception as e:
-        print(f"❌ 推送异常：{e}")
+        print(f"❌ 推送异常：{redact(e)}")
         return False
 
 def main():

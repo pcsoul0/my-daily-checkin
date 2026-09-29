@@ -22,6 +22,8 @@ import os
 import subprocess
 import sys
 
+from logsafe import mask_path, mask_secret, mask_uid, redact
+
 DEFAULT_REPO = "pcsoul0/my-daily-checkin"
 AUTH_DIR = os.path.join(os.environ.get("LOCALAPPDATA", ""),
                         "CodeBuddyExtension", "Data", "Public", "auth")
@@ -73,9 +75,9 @@ def main():
     args = ap.parse_args()
 
     if not os.path.isdir(AUTH_DIR):
-        print(f"[失败] 未找到 WorkBuddy 数据目录: {AUTH_DIR}")
+        print(f"[失败] 未找到 WorkBuddy 数据目录: {mask_path(AUTH_DIR)}")
         return 2
-    print(f"[扫描] 目录: {AUTH_DIR}")
+    print(f"[扫描] 目录: {mask_path(AUTH_DIR)}")
 
     cands = collect_candidates()
     valid = [c for c in cands if c["exp"] > datetime.datetime.now().timestamp()]
@@ -87,9 +89,9 @@ def main():
     valid.sort(key=lambda c: c["exp"], reverse=True)
     best = valid[0]
     print(f"\n[选用] {os.path.basename(best['path'])}")
-    print(f"  token: {best['token'][:6]}...{best['token'][-6:]} (len={len(best['token'])})")
+    print(f"  token: {mask_secret(best['token'])}")
     print(f"  有效期至: {datetime.datetime.fromtimestamp(best['exp'])}")
-    print(f"  uid: {best['uid'][:8]}...  domain: {best['domain']}")
+    print(f"  uid: {mask_uid(best['uid'])}  domain: {best['domain']}")
 
     if args.out:
         with open(args.out, "w", encoding="utf-8") as f:
@@ -104,7 +106,7 @@ def main():
             if r.returncode == 0:
                 print(f"[完成] GitHub Secret {name} 已更新（{args.repo}）")
             else:
-                print(f"[失败] 写入 {name} 失败: {r.stderr.strip()}")
+                print(f"[失败] 写入 {name} 失败: {redact(r.stderr.strip())[:300]}")
                 return 4
         print("[提示] 可到 Actions 页面手动 Run workflow 立即验证。")
 

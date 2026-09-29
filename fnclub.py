@@ -6,6 +6,8 @@ import shutil
 import tempfile
 from datetime import datetime, timedelta, timezone
 
+from logsafe import redact, redact_obj
+
 # ====================== 配置区 ======================
 FNOS_COOKIE = os.environ.get("FNOS_COOKIE", "")
 # ====================================================
@@ -239,7 +241,7 @@ def fnos_sign():
             resp.encoding = resp.apparent_encoding or "gbk"
 
         feats = diagnose(resp.text)
-        print("[DEBUG] 页面特征:", feats)
+        print("[DEBUG] 页面特征:", redact_obj(feats, 400))
 
         # 处理 Aliyun WAF acw_sc__v2 Cookie 挑战：解出 cookie 后重试一次
         if feats["waf_challenge"] and feats["waf_type"].startswith("acw_sc__v2"):
@@ -255,7 +257,7 @@ def fnos_sign():
                 if resp.encoding and resp.encoding.lower() in ("iso-8859-1", ""):
                     resp.encoding = resp.apparent_encoding or "gbk"
                 feats = diagnose(resp.text)
-                print("[DEBUG] 重试后页面特征:", feats)
+                print("[DEBUG] 重试后页面特征:", redact_obj(feats, 400))
             else:
                 sign_result = "❌ 签到失败：acw_sc__v2 解算失败（未找到 node 或挑战脚本异常）"
                 print(sign_result); write_result(sign_result); return
@@ -303,10 +305,10 @@ def fnos_sign():
         for _kw in ["今日奖励", "连续签到", "签到成功", "获得", "奖励", "恭喜"]:
             _j = _dbg.find(_kw)
             if _j != -1:
-                print("[DEBUG] 签到接口奖励上下文:", _dbg[max(0, _j - 40): _j + 100].strip())
+                print("[DEBUG] 签到接口奖励上下文:", redact(_dbg[max(0, _j - 40): _j + 100].strip())[:200])
                 break
         if reward:
-            print("[DEBUG] 签到接口奖励识别:", reward)
+            print("[DEBUG] 签到接口奖励识别:", redact(reward)[:120])
 
         print("📊 正在获取账户信息...")
         info_url = "https://club.fnnas.com/home.php?mod=spacecp&ac=credit&showcredit=1"

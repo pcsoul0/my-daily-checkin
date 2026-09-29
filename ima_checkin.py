@@ -48,6 +48,8 @@ import time
 import urllib.error
 import urllib.request
 
+from logsafe import mask_secret, redact, redact_obj
+
 # 网关对默认 UA 不友好，统一带浏览器 UA（与 workbuddy_checkin.py 同策略）
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
@@ -78,13 +80,6 @@ try:
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
     pass
-
-
-def mask(tok):
-    """凭据脱敏，只留首尾各 6 字符用于日志辨认。"""
-    if not isinstance(tok, str) or len(tok) < 16:
-        return "***"
-    return tok[:6] + "..." + tok[-6:] + f" (len={len(tok)})"
 
 
 def to_int32(x):
@@ -239,7 +234,7 @@ def make_session():
         # IMA_REFRESH 存在但不可用：大声报错，避免静默回退到注定过期的旧 cookie 模式
         print(f"⚠️ 检测到 IMA_REFRESH 但无法使用：{src}")
     if cred:
-        print(f"凭据来源: {src}（refresh 模式）；refresh_token {mask(cred['refresh_token'])}")
+        print(f"凭据来源: {src}（refresh 模式）；refresh_token {mask_secret(cred['refresh_token'])}")
         new_token, rotated, err = refresh_access_token(cred)
         if err:
             return "", "", "", f"IMA_REFRESH 刷新失败：{err}"
@@ -248,7 +243,7 @@ def make_session():
             print("⚠️ 服务端轮换了 refreshToken（本次仍可签到；自动化依赖其长期有效，"
                   "若频繁出现需改用扫码更新方案）")
         cookie = build_cookie(cred, new_token, rt)
-        print(f"access token 已刷新 {mask(new_token)}")
+        print(f"access token 已刷新 {mask_secret(new_token)}")
         return cookie, new_token, "refresh 模式（IMA_REFRESH）", None
 
     cookie, src = load_cookie()
@@ -257,7 +252,7 @@ def make_session():
     token = extract_imatoken(cookie)
     if not token:
         return "", "", "", "cookie 中未包含 IMA-TOKEN 字段"
-    print(f"凭据来源: {src}（旧 cookie 模式）；IMA-TOKEN {mask(token)}")
+    print(f"凭据来源: {src}（旧 cookie 模式）；IMA-TOKEN {mask_secret(token)}")
     return cookie, token, "旧 cookie 模式（IMA_COOKIE）", None
 
 
@@ -295,13 +290,13 @@ def post_retry(endpoint, body, cookie, token):
         status, data = post(endpoint, body, cookie, token)
         if status is None:
             err = f"网络异常（第 {attempt}/{MAX_RETRY} 次）"
-            print(err)
+            print(redact(err))
             if attempt < MAX_RETRY:
                 time.sleep(RETRY_INTERVAL)
             continue
         if status >= 500:
             err = f"服务端 {status}（第 {attempt}/{MAX_RETRY} 次）"
-            print(err)
+            print(redact(err))
             if attempt < MAX_RETRY:
                 time.sleep(RETRY_INTERVAL)
             continue
@@ -352,7 +347,7 @@ def claim_bonus(cookie, token, actions):
 def main():
     cookie, token, desc, err = make_session()
     if err:
-        print("ERROR:", err)
+        print("ERROR:", redact(err))
         summary_write("## ima 每日登录领算力\n\n- ❌ " + err)
         write_result("❌ ima 每日登录领算力：" + err)
         return 2 if "未找到" in err else 5
@@ -368,7 +363,7 @@ def main():
         ok, msg = classify_result(code if code is not None else -9999)
         summary_write(f"## ima 每日登录领算力\n\n- ❌ 查询失败：{msg}")
         write_result(f"❌ ima 每日登录领算力：查询失败（{msg}）")
-        print("查询响应:", info)
+        print("查询响应:", redact_obj(info, 500))
         return 5 if ok is False else 4
 
     infos = info.get("infos") or []
@@ -420,7 +415,7 @@ def main():
             time.sleep(30)
             new_infos, new_days, new_total, rerr = refresh_infos(cookie, token)
             if rerr is not None:
-                print(f"[满签] 重查失败：{rerr}")
+                print(f"[满签] 重查失败：{redact(rerr)}")
                 continue
             infos, days, total = new_infos, new_days, new_total
             bonus = next((it for it in infos if it.get("top") == "满签奖励"), None)

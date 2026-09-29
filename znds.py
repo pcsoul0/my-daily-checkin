@@ -2,6 +2,8 @@ import re
 import time
 import os
 from datetime import datetime, timezone, timedelta
+
+from logsafe import redact
 import requests
 from urllib.parse import unquote
 
@@ -43,7 +45,7 @@ def get_formhash_and_login(session, username, password):
 
     if response.status_code != 200:
         print(f"[ERROR] 访问登录页面失败，状态码: {response.status_code}")
-        print(f"[ERROR] 页面内容: {response.text[:500]}")
+        print(f"[ERROR] 页面内容: {redact(response.text)[:500]}")
         raise Exception(f"登录失败：访问登录页面失败，状态码 {response.status_code}")
 
     # 尝试多种可能的 formhash 模式
@@ -63,7 +65,7 @@ def get_formhash_and_login(session, username, password):
     
     if not formhash:
         print("[ERROR] 无法从登录页面获取 formhash。页面HTML内容如下:")
-        print(response.text[:1000])
+        print(redact(response.text)[:1000])
         raise Exception("登录失败：无法获取 formhash")
     
     print(f"[INFO] 成功获取到登录页面的 formhash: {formhash}")
@@ -98,7 +100,8 @@ def get_formhash_and_login(session, username, password):
     
     if "您还没有登录" in verify_decoded_text or "请登录后再使用" in verify_decoded_text or "login" in verify_response.url:
         print(f"[ERROR] 登录验证失败。访问个人中心页面被重定向或提示未登录。URL: {verify_response.url}")
-        print(f"[ERROR] 页面内容片段: {verify_decoded_text[:500]}")
+                # 已登录态页面正文含账号标识，只报长度不打印正文（公开仓库日志安全）
+        print(f"[ERROR] 页面长度: {len(verify_decoded_text)} 字符（正文含账号信息，已省略）")
         raise Exception("登录失败：请检查用户名和密码是否正确。")
         
     print("[INFO] 登录验证成功")
@@ -155,7 +158,7 @@ def sign_in_and_get_credit_info(session):
 
     if not formhash:
          print(f"[ERROR] 无法在论坛主页 (forum.php) 获取 formhash。页面HTML内容如下:")
-         print(home_decoded_text[:3000])
+         print(f"[ERROR] 页面长度: {len(home_decoded_text)} 字符（正文含账号信息，已省略）")
          raise Exception("签到失败：无法在论坛主页获取 formhash")
     
     print(f"[INFO] 从论坛主页 (forum.php) 获取到最新的 formhash: {formhash}")
@@ -175,7 +178,7 @@ def sign_in_and_get_credit_info(session):
     # 尝试从响应中提取签到信息
     msg_match = re.search(r'"alert_info"[^>]*>.*?<p>(.*?)</p>', sign_decoded_text, re.S)
     msg = msg_match.group(1).strip() if msg_match else "未知"
-    print(f"[INFO] 签到信息: {msg}")
+    print(f"[INFO] 签到信息: {redact(msg)}")
 
     # 获取积分信息
     print(f"[DEBUG] 正在获取积分信息...")

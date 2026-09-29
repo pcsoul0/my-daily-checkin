@@ -12,7 +12,8 @@
 3. 瞬时网络错误（DNS/超时/5xx）自动重试 3 次；
 4. 结果写入 GITHUB_STEP_SUMMARY，并追加写入 checkin_results.txt
    （由 daily_push.py 汇总后经 PushPlus 推送）；
-5. 全程不打印 token 本体。
+5. 日志脱敏：token/uid 只输出哈希指纹，接口返回体与异常文本统一过滤
+   requestId / UUID / 凭据字段 / 手机号（本仓库已公开，日志不得残留可关联信息）。
 
 退出码：0 成功/已签 | 2 配置缺失 | 4 网络失败 | 5 API 拒绝（含 token 过期）
 """
@@ -24,6 +25,8 @@ import sys
 import time
 import urllib.error
 import urllib.request
+
+from logsafe import mask_secret, mask_uid, redact
 
 # 网关拒绝 Python-urllib 默认 UA（get-user-resource 会 403），统一带浏览器 UA
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -40,13 +43,6 @@ try:
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
     pass
-
-
-def mask(tok):
-    """token 脱敏，只留首尾各 6 字符用于日志辨认。"""
-    if not isinstance(tok, str) or len(tok) < 16:
-        return "***"
-    return tok[:6] + "..." + tok[-6:] + f" (len={len(tok)})"
 
 
 def write_result(content):
@@ -126,7 +122,7 @@ def call_with_retry(path, token, uid, body=None):
         try:
             s, b = call_api(path, token, uid, body)
             if s >= 500:
-                last = RuntimeError(f"HTTP {s}: {b[:200]}")
+                last = RuntimeError(f"HTTP {s}: {redact(b)[:200]}")
             else:
                 return s, b
         except (urllib.error.URLError, OSError) as e:
@@ -167,8 +163,8 @@ def main():
         write_summary(False, log)
         return 2
     p(f"[信息] 凭据来源: {src}")
-    p(f"[信息] token: {mask(token)}")
-    p(f"[信息] uid: {uid[:8]}...  domain: {DOMAIN}  api: {API_BASE}")
+    p(f"[信息] token: {mask_secret(token)}")
+    p(f"[信息] uid: {mask_uid(uid)}  domain: {DOMAIN}  api: {API_BASE}")
 
     exp = jwt_exp(token)
     if exp:
@@ -184,11 +180,11 @@ def main():
     try:
         s, b = call_with_retry("/v2/billing/meter/daily-checkin", token, uid)
     except Exception as e:
-        p(f"[失败] 签到网络错误（已重试{MAX_RETRY}次）: {e}")
+        p(f"[失败] 签到网络错误（已重试{MAX_RETRY}次）: {redact(e)}")
         write_result(f"❌ WorkBuddy 签到失败：网络错误（已重试 {MAX_RETRY} 次）")
         write_summary(False, log)
         return 4
-    p(f"[返回] HTTP {s}: {b[:400]}")
+    p(f"[返回] HTTP {s}: {redact(b)[:400]}")
 
     try:
         resp = json.loads(b)
@@ -204,7 +200,7 @@ def main():
         p("[结果] 今日已签到（网关以 HTTP 400 + code=10001 表示，属正常）。✅")
         status_text = "今日已签到"
     else:
-        p(f"[失败] 签到被拒绝 code={code} msg={resp.get('msg')}")
+        p(f"[失败] 签到被拒绝 code={code} msg={redact(resp.get('msg'))}")
         if s in (401, 403) or code in (401, 403):
             p("[提示] 401/403 通常为 token 失效：重新从浏览器抓 Bearer token 并更新 Secret。")
         write_result(f"❌ WorkBuddy 签到失败：API 拒绝 code={code}")
@@ -221,7 +217,7 @@ def main():
                       f"/ 连签 {d.get('streak_days')} 天")
             p(f"[积分] {credit}")
     except Exception as e:
-        p(f"[提示] 状态查询失败（不影响签到结果）: {e}")
+        p(f"[提示] 状态查询失败（不影响签到结果）: {redact(e)}")
 
     write_result("✅ WorkBuddy " + status_text + (f" | {credit}" if credit else ""))
     write_summary(True, log)

@@ -11,6 +11,8 @@ import re
 import requests
 from datetime import datetime, timedelta, timezone
 
+from logsafe import redact, redact_obj
+
 USER_AGENT = ("Mozilla/5.0 (Linux; Android 13; SM-G981B) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36")
 
@@ -102,7 +104,7 @@ def run_sign_in():
             r = session.post(SIGN_API, data={"formhash": formhash}, timeout=30)
             try:
                 result = r.json()
-                print(f"📥 签到接口返回: {result}")
+                print(f"📥 签到接口返回: {redact_obj(result, 400)}")
                 if result.get("success") or "已经签到" in str(result):
                     sign_success = True
                     sign_msg = result.get("message", "签到成功")
@@ -110,7 +112,7 @@ def run_sign_in():
                     sign_msg = result.get("message", "未知错误")
             except Exception:
                 sign_msg = "接口返回非 JSON（可能触发 WAF）"
-                print(f"⚠️ {sign_msg}: {r.status_code} / {r.text[:200]}")
+                print(f"⚠️ {sign_msg}: {r.status_code} / {redact(r.text)[:200]}")
 
         if not sign_success:
             msg = f"❌ 恩山论坛签到失败：{sign_msg}"
@@ -136,7 +138,7 @@ def run_sign_in():
                     continue
                 # 调试：打印含关键字的 li，便于核对页面真实结构
                 if any(k in txt for k in ["积分", "Points", "贡献", "Contributions", "恩山币", "EnshanCoin"]):
-                    print(f"   [li] {txt[:60]}")
+                    print(f"   [li] {redact(txt)[:60]}")
                 # 总积分（排除“今日积分”）
                 if ("积分" in txt and "今日" not in txt) or "Points" in txt:
                     m = re.search(r"(\d+)", txt)   # 位置无关：积分12345 / 12345积分 都能抓
