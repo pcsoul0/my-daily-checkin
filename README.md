@@ -2,7 +2,10 @@
 
 基于 GitHub Actions 的多站点每日自动签到合集：4 个论坛 + WorkBuddy 积分签到 + 腾讯 ima 每日登录领算力 + 哔哩哔哩每日任务 + 雨云每日签到。定时任务在云端运行，签到结果通过 [PushPlus](https://www.pushplus.plus/) 推送到微信，仓库本身不保存任何运行记录。
 
-> 本项目仅供学习交流，请遵守各站点用户协议，请勿用于商业用途。
+> **免责声明**：本项目仅为个人自用签到脚本，仅供学习交流。使用前请务必完整阅读
+> [README](README.md) 与 [维护与二次开发说明](MAINTENANCE.md)，理解全部潜在风险
+> （包括但不限于：账号被站点风控、封禁、Cookie/凭据泄露）。请遵守各站点用户协议，
+> 勿用于商业用途。**因使用本项目产生的任何后果，由使用者自行承担，作者概不负责。**
 
 ## 脚本说明
 
@@ -17,6 +20,9 @@
 | `bilibili_checkin.py` | 哔哩哔哩 (bilibili.com) | Cookie 认证，默认执行投币 / 分享 / 观看视频每日任务（投币带来源回退与已投去重）；漫画签到 / 银瓜子兑换 / 应援团签到可用 `TASK_CONFIG` 按需开启。写 `checkin_results.txt` 交汇总，不自行推送 | `BILIBILI_COOKIE` |
 | `rainyun_checkin.py` | 雨云 (rainyun.com) | API Key（`x-api-key`）纯 HTTP 领「每日签到」，签到前后各取一次积分算增量；**风控命中时判「需人工验证码」直接跳过，不接打码、不绕验证**（详见 [雨云签到说明](MAINTENANCE.md#雨云签到说明)） | `RAINYUN_API_KEY` |
 | `daily_push.py` | PushPlus | 汇总本轮所有签到结果，HTML 模板推送到微信，推送后清空结果文件 | `PUSHPLUS_TOKEN` |
+
+> ⚠️ **账号风险提示**：其中 B 站 / ima / 雨云需提供真实账号凭据，命中站点风控时可能导致
+> **签到失败、账号被标记甚至封禁**，请自行评估风险后再使用。
 
 ## 运行流程
 
@@ -49,3 +55,6 @@
 
 其中 `bilibili_checkin.py` 移植自 [dangks/bilibili_checkin](https://github.com/dangks/bilibili_checkin)，
 沿用其 MIT 许可。
+
+> 本仓库所有脚本按 MIT 许可分发，按「现状」提供、不附带任何明示或默示担保；
+> 使用即视为接受前述免责声明。
