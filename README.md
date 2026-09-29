@@ -274,4 +274,4 @@ gh secret set IMA_REFRESH --repo <owner>/<repo> < ima_refresh.info
 [MIT](LICENSE)
 
 其中 `bilibili_checkin.py` 移植自 [dangks/bilibili_checkin](https://github.com/dangks/bilibili_checkin)，
-沿用其 MIT 许可，原始版权声明 `Copyright (c) 2025 Dangks` 保留在源项目仓库。
+沿用其 MIT 许可。
