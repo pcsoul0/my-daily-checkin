@@ -1,6 +1,7 @@
 name: 每日签到总调度
 
-# 单一调度：每天北京时间 23:51 顺序跑完全部签到任务（4 个论坛 + WorkBuddy + ima），
+# 单一调度：每天北京时间 23:51 顺序跑完全部签到任务（恩山 / 飞牛 / 智能电视网 / HIFITI
+# 四个论坛 + WorkBuddy + ima + 哔哩哔哩 + 雨云），
 # 各脚本把结果追加写入本地文件 checkin_results.txt（已被 .gitignore 忽略，不提交仓库），
 # 最后由 daily_push.py 汇总并通过 PushPlus 推送。
 # 所有签到步骤均为 continue-on-error，单个站点失败不中断后续任务；
@@ -89,6 +90,14 @@ jobs:
           # COIN_SELECT_LIKE: '1'      # 投币时是否同时点赞
           # COIN_VIDEO_SOURCE: ranking # 投币目标来源：ranking（默认）或 dynamic
         run: python bilibili_checkin.py
+        continue-on-error: true
+
+      # 雨云是「API Key 纯 HTTP + 不绕验证码」方案：风控命中时会判「需人工验证码」并跳过，
+      # 属预期行为（详见 rainyun_checkin.py 头部说明），不视为流水线故障。
+      - name: 雨云每日签到
+        env:
+          RAINYUN_API_KEY: ${{ secrets.RAINYUN_API_KEY }}   # 雨云后台「用户中心 → API 密钥」生成
+        run: python rainyun_checkin.py
         continue-on-error: true
 
       - name: PushPlus 汇总通知
