@@ -282,16 +282,26 @@ def fnos_sign():
     # 网络层重试：仅对连接错误 / 读取超时 / HTTP 5xx 重试（自愈偶发抖动），
     # 不对 4xx 重试（多为 cookie 失效等需人工处理的问题）。与下方 WAF(acw)
     # 业务层重试互不冲突，叠加工作。
+    #
+    # 取值注意（2026-09-30 离线实测 urllib3 2.24 的 Retry.increment 逻辑）：
+    #   total 与 connect 是「取小者为上限」——只提 total 或只提 connect 都无效，
+    #   必须两者同时提高才真正增加重试次数。实测矩阵：
+    #     total=2, connect=2 -> 重试 2 次（共 3 次请求）
+    #     total=4, connect=2 -> 重试 2 次（只提 total 无效）
+    #     total=2, connect=4 -> 重试 2 次（只提 connect 无效）
+    #     total=4, connect=4 -> 重试 4 次（共 5 次请求）
+    #   ConnectTimeoutError 属 urllib3 的「连接类错误」，本就由 connect 计数覆盖，
+    #   无需（也不存在）connect_timeout / read_timeout 之类的开关参数。
     from requests.adapters import HTTPAdapter
     from urllib3.util.retry import Retry
 
     retry_strategy = Retry(
-        total=2,                      # 最多重试 2 次（共 3 次请求）
-        backoff_factor=1,             # 退避 1s / 2s
+        total=4,                      # 最多重试 4 次（共 5 次请求）
+        backoff_factor=1,             # 退避 1s / 2s / 4s / 8s（合计 15s）
         status_forcelist=[500, 502, 503, 504],
         allowed_methods=["GET", "POST"],
-        connect=2,
-        read=2,
+        connect=4,                    # 必须与 total 同步提高，见上方实测说明
+        read=4,
     )
     adapter = HTTPAdapter(max_retries=retry_strategy)
     session.mount("https://", adapter)
